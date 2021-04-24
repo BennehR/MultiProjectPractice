@@ -15,8 +15,8 @@ public class ButtonHelper : MonoBehaviour
         }
         else
         {
-            sprrenderer.enabled = true;
             source.Play();
+            sprrenderer.enabled = true;
         }
     }
 

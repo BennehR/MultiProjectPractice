@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class SimonController : MonoBehaviour
 {
@@ -12,6 +13,7 @@ public class SimonController : MonoBehaviour
     private int sequencePosition = 0;
     private int layerMask;
     private List<int> gameSequence = new List<int>();
+    private GameObject selectedButton;
     private Coroutine gameCoroutine;
     private Coroutine playerInputCoroutine;
     private Coroutine blinkCoroutine;
@@ -19,8 +21,10 @@ public class SimonController : MonoBehaviour
 
     public int score = 0;
     public List<GameObject> gameButtons;
+    public List<GameObject> allGreenLights;
+    public List<GameObject> allRedLights;
+    public Text scoreText;
 
-    public GameObject selectedButton;
     Ray ray;
     RaycastHit hitData;
 
@@ -80,6 +84,8 @@ public class SimonController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        scoreText.text = $"Score: {score}";
+
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             toggleUI();
@@ -87,20 +93,18 @@ public class SimonController : MonoBehaviour
 
         //Raycast
         Vector3 worldPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        RaycastHit2D hitData = Physics2D.Raycast(new Vector2(worldPosition.x, worldPosition.y), Vector2.zero, 0);
+        RaycastHit2D hitData = Physics2D.Raycast(new Vector2(worldPosition.x, worldPosition.y), Vector2.zero, 0, layerMask);
 
-        
+
         if (hitData && Input.GetMouseButtonDown(0)) //  layerMask   && Input.GetMouseButtonDown(0)
         {
             selectedButton = hitData.transform.gameObject;
 
-            
-
             if (selectedButton != gameButtons[4])
             {
                 if (listenForPlayer)
-                {
-                    StartCoroutine(BlinkOnce(selectedButton));
+                {                    
+                    StartCoroutine(BlinkOnce(selectedButton, 0.1f, false));
 
                     if (selectedButton == gameButtons[gameSequence[sequencePosition]])
                     {
@@ -114,46 +118,67 @@ public class SimonController : MonoBehaviour
                         if (sequencePosition == gameSequence.Count)
                         {
                             print("This was the last piece in the sequence");
-                            StartCoroutine(ProgressGame());
+                            score++;
+                            StartCoroutine(ProgressGame(true));
                         }
                     }
                     else
                     {
+                        listenForPlayer = false;
                         print($"Incorrect - Ray Component - {selectedButton.name}");
-                        GameReset();
+                        StartCoroutine(ProgressGame(false));
                     }
                 }
             }
             else
             {
-                StartCoroutine(BlinkOnce(selectedButton));
+                StartCoroutine(BlinkOnce(selectedButton, 0.5f, false));
                 toggleUI();
             }
         }
     }
-    //TODO work the update into a coroutine?
 
-
-
-    private IEnumerator ProgressGame()
+    private IEnumerator ProgressGame(bool doProgress)
     {
         listenForPlayer = false;
+        yield return new WaitForSeconds(0.5f);
 
-        //TODO Make something to flash all green maybe?
+        if (doProgress)
+        {
+            //foreach (GameObject greenLight in allGreenLights)
+            //{
+            //    StartCoroutine(BlinkOnce(greenLight, true));
+            //}
 
-        sequencePosition = 0;
-        print($"Game Sequence={SequenceToString(gameSequence)}");
-        BuildSequence();
-        print($"Game Sequence={SequenceToString(gameSequence)}");
-        yield return PlaySequence();
+            yield return new WaitForSeconds(0.5f);
+
+            sequencePosition = 0;
+            print($"Game Sequence={SequenceToString(gameSequence)}");
+            BuildSequence();
+            print($"Game Sequence={SequenceToString(gameSequence)}");
+            yield return PlaySequence();
+        }
+        else
+        {
+            foreach (GameObject redLight in allRedLights)
+            {
+                StartCoroutine(BlinkOnce(redLight, 0.5f, true));
+                score = 0;
+            }
+
+            yield return new WaitForSeconds(0.5f);
+            GameReset();
+        }
+
+        yield return new WaitForSeconds(0.5f);
 
         listenForPlayer = true;
     }
 
-    private IEnumerator BlinkOnce(GameObject button)
+    private IEnumerator BlinkOnce(GameObject button, float length, bool silent)
     {
-        button.GetComponent<ButtonHelper>().FlashPiece(false);
-        yield return new WaitForSeconds(0.25f);
+        button.GetComponent<ButtonHelper>().FlashPiece(silent);
+        yield return new WaitForSeconds(length);
         button.GetComponent<ButtonHelper>().ResetPiece();
     }
 
@@ -210,12 +235,14 @@ public class SimonController : MonoBehaviour
     {
         print("Building sequence");
 
-        //for(int i = 0; i < 30; i++)
+        //for (int i = 0; i < 30; i++)
         //{
         //    gameSequence.Add(Random.Range(0, 4));
         //}
 
-        gameSequence = new List<int>() { 0, 1, 2, 3 };
+        gameSequence.Add(Random.Range(0, 4));
+
+        //gameSequence = new List<int>() { 0, 1, 2, 3 };
 
         string output = "";
 
@@ -228,6 +255,7 @@ public class SimonController : MonoBehaviour
 
     private IEnumerator PlaySequence()
     {
+        yield return new WaitForSeconds(0.5f);
         for (int i = 0; i < gameSequence.Count; i++)
         {
             List<int[]> lightSequence = new List<int[]>() { new int[] { 0, 0, 0, 0 } };
@@ -237,19 +265,6 @@ public class SimonController : MonoBehaviour
 
         listenForPlayer = true;
     }
-    
-    //private IEnumerator WaitForPlayerSequence()
-    //{
-    //    sequencePosition = 0;
-
-    //    while (isGameRunning)
-    //    {
-    //        while (listenForPlayer)
-    //        {
-
-    //        }
-    //    }
-    //}
 
     private IEnumerator RunGame()
     {
@@ -257,15 +272,15 @@ public class SimonController : MonoBehaviour
         //yield return StartCoroutine(PowerOn());
         BuildSequence();
         yield return StartCoroutine(PlaySequence());
-
-        yield return new WaitForEndOfFrame();
     }
 
     private void GameReset()
     {
+        StopCoroutine(RunGame());
         print("Game reset");
         gameSequence.Clear();
-        StartCoroutine(ProgressGame());
+        sequencePosition = 0;
+        StartCoroutine(RunGame());
     }
 
     private void toggleUI()
