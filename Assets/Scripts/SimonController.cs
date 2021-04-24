@@ -8,18 +8,19 @@ public class SimonController : MonoBehaviour
     [SerializeField]
     UICollection ui;
     
-    private bool isGameRunning = true;
     private bool listenForPlayer = false;
     private int sequencePosition = 0;
     private int layerMask;
+    private int score = 0;
     private List<int> gameSequence = new List<int>();
     private GameObject selectedButton;
+    private AudioSource playingAudio;
     private Coroutine gameCoroutine;
     private Coroutine playerInputCoroutine;
     private Coroutine blinkCoroutine;
     private Dictionary<string, List<int[]>> Patterns = new Dictionary<string, List<int[]>>();
 
-    public int score = 0;
+    public bool openSequence = false;
     public List<GameObject> gameButtons;
     public List<GameObject> allGreenLights;
     public List<GameObject> allRedLights;
@@ -33,17 +34,33 @@ public class SimonController : MonoBehaviour
         string output = "";
         for (int i = 0; i < sequence.Count; i++)
         {
-            if (i < sequence.Count - 1)
+            if (i == 0)
             {
-                output = $"{output}, {sequence[i]}, ";
+                output = sequence[i].ToString();
             }
-            else if (i == sequence.Count - 1)
+            else if (i < sequence.Count)
             {
-                output = $"{output}, {sequence[i]}";
+                output += $", {sequence[i]}";
             }
         }
 
         return output;
+    }
+
+    private void Awake()
+    {
+        print("AWAKE");
+        try
+        {
+            StopCoroutine(gameCoroutine);
+            print("Game Coroutine stopped");
+        }
+        catch(System.Exception err)
+        {
+            print(err);
+        }
+
+        StartCoroutine(PowerOn());
     }
 
     // Start is called before the first frame update
@@ -77,7 +94,7 @@ public class SimonController : MonoBehaviour
             new int[] { 0, 0, 0, 0 }
         });
 
-        gameCoroutine = StartCoroutine(RunGame());
+        //gameCoroutine = StartCoroutine(PowerOn());
         //playerInputCoroutine = StartCoroutine(ListenerCoroutine());
     }
 
@@ -132,7 +149,7 @@ public class SimonController : MonoBehaviour
             }
             else
             {
-                StartCoroutine(BlinkOnce(selectedButton, 0.5f, false));
+                StartCoroutine(BlinkOnce(selectedButton, 0.5f, true));
                 toggleUI();
             }
         }
@@ -153,9 +170,7 @@ public class SimonController : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
 
             sequencePosition = 0;
-            print($"Game Sequence={SequenceToString(gameSequence)}");
             BuildSequence();
-            print($"Game Sequence={SequenceToString(gameSequence)}");
             yield return PlaySequence();
         }
         else
@@ -217,18 +232,21 @@ public class SimonController : MonoBehaviour
 
     private IEnumerator PowerOn()
     {
-        print("Testing Button LED's...");
+        if (openSequence)
+        {
+            print("Testing Button LED's...");
+            //Start up
+            yield return new WaitForSeconds(0.5f);
+            yield return StartCoroutine(SetLights(false, 1, Patterns["Clockwise"], 0.1f));
 
-        //Start up
-        yield return new WaitForSeconds(2);
-        yield return StartCoroutine(SetLights(false, 1, Patterns["Clockwise"], 0.1f));
+            //Lightshow
+            //yield return StartCoroutine(SetLights(true, 2, Patterns["CrissCross"]));
+            yield return StartCoroutine(SetLights(true, 1, Patterns["FullOnOff"], 0.2f));
+        }
 
-        //Lightshow
-        //yield return StartCoroutine(SetLights(true, 2, Patterns["CrissCross"]));
-        yield return StartCoroutine(SetLights(true, 1, Patterns["FullOnOff"], 0.2f));
-
-        yield return new WaitForSeconds(1);
         print("Game Powered Up");
+
+        StartCoroutine(RunGame());
     }
 
     private void BuildSequence()
@@ -244,13 +262,7 @@ public class SimonController : MonoBehaviour
 
         //gameSequence = new List<int>() { 0, 1, 2, 3 };
 
-        string output = "";
-
-        foreach(int i in gameSequence)
-        {
-            output += $"{i} ";
-        }
-        print($"Finished building sequence {output}");
+        print($"Game Sequence={SequenceToString(gameSequence)}");
     }
 
     private IEnumerator PlaySequence()
@@ -287,14 +299,27 @@ public class SimonController : MonoBehaviour
     {
         if (ui.Visible())
         {
+            if (playingAudio)
+            {
+                playingAudio.Play();
+                playingAudio = null;
+            }
+            Time.timeScale = 1;
             ui.Hide();
             listenForPlayer = true;
-            //Time.timeScale = 0;
             //print("UI visible, hiding");
         }
         else
         {
-            //Time.timeScale = 0;
+            foreach (GameObject button in gameButtons)
+            {
+                if (button.GetComponent<AudioSource>().isPlaying)
+                {
+                    playingAudio = button.GetComponent<AudioSource>();
+                    playingAudio.Pause();
+                }
+            }
+            Time.timeScale = 0;
             listenForPlayer = false;
             ui.Show();
             //print("UI hidden, showing");
